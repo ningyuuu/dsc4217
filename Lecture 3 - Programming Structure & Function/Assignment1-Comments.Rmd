@@ -1,0 +1,135 @@
+---
+title: "Assignment 1 Solution"
+author: "Dr. Liu Qizhang"
+date: "1 February 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Q1
+
+Most of sub questions in Q1 are simple. The only one that worth mentioning is the question asking for max day of each month.
+
+One solution given is
+
+```{r}
+library(dplyr)
+complete %>% group_by(Month) %>% summarise(lastday = max(Day))
+```
+
+The team used another package. It does not run and seems to have some missing component in their codes. Not recommend to use new package unless necessary.
+
+The second solution given is
+
+```{r}
+sets <- split(airquality$Day,airquality$Month)
+lapply(sets,max)
+```
+
+This solution definitely works. However, it is a bit tedious and incur additional consumption of memory.
+
+The neatest soluion is the following one. You can tell from this example that tapply does exactly what the second solution does: split Day by Month, then apply max function. But it does not require intermedia data.
+
+```{r}
+tapply(airquality$Day,airquality$Month,max)
+```
+
+## Q2
+
+There are again multiple ways to solve this problem.
+
+```{r}
+#Method 1. Using readHTMLTable function
+library(XML)
+url = "http://statisticstimes.com/geography/countries-by-continents.php"
+url_data = getURL("http://statisticstimes.com/geography/countries-by-continents.php")
+countries_data = readHTMLTable(url_data,stringAsFactors = FALSE)
+```
+
+The result is a list of tables storing country data. Then we may add a new column representing continent and then hard code the continent data with respect to the table itself. For example,
+
+```{r}
+africa <- as.data.frame(countries_data$table_id1)
+africa$Continent <- "Africa"
+africa
+```
+
+But this is not ideal way in crawling data. We need to avoid any hard coding in our codes, as much as possible.
+
+The most flexible way to crawl data is using rvest package, which extract data from HTML page while reserving some XML data structure. This allows a quick search by xpath.
+
+```{r}
+theurl <- "http://statisticstimes.com/geography/countries-by-continents.php" 
+urldata <- getURL(theurl)
+data <- read_html(urldata, stringsAsFactors = FALSE) 
+tables <- html_table(html_nodes(data,css = "table.display"))
+
+#setting list of continents
+continents <- html_nodes(data,"table caption")
+continents <- gsub("\\(.*?\\)","",html_text(continents))   #remove brackets
+continents <- trimws(continents) #remove spaces
+
+#create data frame from the tables and add continents to each table
+df <- data.frame(tables[1])
+df$Continent <- continents[1]
+
+for (i in 2: length(tables)) {
+  temp <- data.frame(tables[i])
+  temp$Continent <- continents[i]
+  df <- rbind(df,temp)
+}
+df
+```
+
+##Q3
+
+Most of students managed to do Q3 very well. Just three minor issues to mention.
+
+###Issue 1: Look Up values to construct Distributor.New column
+
+When constructing Distributor.New column, many students use the following method: add a new column, say count, in the data to represent the number of movies distributed by each distributor, then use ifelse function to construct Distributor.New column based on the value in this count column. It works like the following:
+
+```{r}
+moviedata <- read.csv("MovieData.csv")
+counts <- data.frame(table(moviedata$Distributor))
+counts
+
+moviedata <- merge(moviedata,counts,by.x = "Distributor",by.y = "Var1")
+moviedata$Distributor.New <- ifelse(moviedata$Freq >= 30,as.character(moviedata$Distributor),"Others")
+```
+
+This results in one additional column in moviedata. An alternative method is to use a function similar to lookup:
+
+```{r}
+lookup = as.data.frame(table(moviedata$Distributor))
+colnames(lookup) = c("Distributor","Count")
+lookup$type = ifelse(lookup$Count >=30,as.character(lookup$Distributor),"Others" )
+#use the lookup table to create a new array for the movies dataframe, using the match function
+moviedata$Distributor.New = lookup[match(moviedata$Distributor,lookup$Distributor),"type"]
+```
+
+###Issue 2: Use tapply in finding mean and SD of ratio1 with respect to both decades and Distributor New
+
+```{r}
+moviedata$Budget <- as.numeric(trimws(gsub(",","",(gsub("\\$","",moviedata$Budget)))))
+moviedata$US.Gross <- as.numeric(trimws(gsub(",","",(gsub("\\$","",moviedata$US.Gross)))))
+moviedata$Release.Date <- as.Date(moviedata$Release.Date,"%d/%m/%Y")
+moviedata$Ratio1 <- moviedata$US.Gross/moviedata$Budget
+moviedata$Year<-as.numeric(format(moviedata$Release.Date,'%Y'))
+moviedata$Decade<-ifelse(moviedata$Year<1990,"1980s",ifelse(moviedata$Year>1999,"2000s","1990s"))
+
+moviedata$Distributor.New[moviedata$Distributor.New==""] <- "Others"
+
+ratio1<-subset(moviedata, !is.na(US.Gross))
+ratio1_avg <- with(ratio1, tapply(Ratio1, list(Distributor.New, Decade), mean))
+ratio1_avg
+```
+
+Indeed, there is no need to create a subset. We can use na.rm option.
+
+```{r}
+with(moviedata, tapply(Ratio1, list(Distributor.New, Decade), mean, na.rm = TRUE))
+```

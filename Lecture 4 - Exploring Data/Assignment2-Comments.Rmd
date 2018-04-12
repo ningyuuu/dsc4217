@@ -1,0 +1,257 @@
+---
+title: "Assignment 2 Comments"
+author: "Dr. Liu Qizhang"
+date: "8 February 2018"
+output: html_document
+---
+
+## Q1
+
+The objective of Q1 is test students whether they understand how to define a function, how to use for loop, and how to test a function. When we create a function, we need to think of test cases to make sure the function works as desired. This is especially important if you are developing a function for general purpose. 
+
+For example, the following code hard codes the dimension of matrix in the function, which will limit the applicability of the function to only 10x10 matrix. 
+
+```{r}
+#creating the function
+f<-function(m0,V,c) {
+  for (i in 1:10){
+    for (j in 1:10){
+    if (sum(m0[i,j=1:c])>c/2)
+      {V[i]=1}
+    else
+      {V[i]=0}
+    }
+  } 
+print(V)
+}
+f(m0,V,c)
+```
+
+Some teams hard coded the test case like the following. This is not recommended as hard coding has its limitation in the case generatd.
+
+```{r}
+any.matrix <- matrix(c(1,0,0,1,1,1,0,0,0,0,1,1,1,1,1,0,1,1,1,1), nrow =4, ncol=5)
+```
+
+Team 1 did a good job in creating a test case as following:
+
+```{r}
+n = 10 # n and m can be any positive integer
+m = 10
+MATRIX = matrix(rbinom(n*m,1,0.5),n,m)
+```
+
+Just one minor comment on this code. Although n and m can be any positive integer as the team noted, it is still my concern that they use the same number 10 for both n and m. When we are testing our functions or programmes, try to avoid using nice numbers and common scenarios. Very often, functions perform very well for common scenarios, but fail to handle some special cases, which normally are blind spots of programmers when developing the functions. 
+
+Now, let's compare the work done by two teams:
+
+```{r}
+#Team 1
+create_vector = function(c,MATRIX,VECTOR) {
+  
+  # for all rows in MATRIX
+  for ( i in 1:nrow(MATRIX) ) {
+    
+    # initialise a local variable sum=0
+    sum = 0
+    
+    # for all elements in row[i] from 1 to c
+    # sum the elements up
+    for ( j in 1:c ) {
+      sum = sum + MATRIX[i,j]
+    }
+    
+    # if the average of the sum is greater than 0.5,
+    # the majority is 1, hence assign 1 to vector[i]
+    # else assign 0
+    if (sum/c >= 0.5) {
+      VECTOR[i] = 1
+    } else {
+      VECTOR[i] = 0
+    }
+  }
+  return(VECTOR)
+}
+```
+
+```{r}
+#Team 3
+#function 2: create an output vector with the corresponding elements of the vector determined by the majority of the first c elements in the matrix row
+FUN2<-function(M,C){
+    if(is.matrix(M)){
+      if(C<=ncol(M)){
+          if(C==1){#Result vector is the 1st column of the matrix for c=1
+              v<-M[,1]
+              return(v)
+          }
+          else{
+              v<-ifelse(rowSums(M[,1:C]==1)>=rowSums(M[,1:C]==0),1,0) #If count of 1s is equal to 0s in row, we will take it as 1 in this case since it is not specified in question
+              return(v)
+          }
+      }
+      else{
+          #Exception handling if c is larger than matrix column
+          print("The no. of elements you specified, C, should NOT exceed the no. of columns in matrix. Please either create a new matrix with larger dimensions or respecify C again.")
+      }
+    }
+    else
+        #Exception handling if user specifies a non-matrix
+        print("The no. of rows and columns of matrix should be greater than 1. Please repsecify the dimensions of your matrix.")
+}
+```
+
+Team 3's work is better because they take care of the possible scenarios where user may provide wrong inputs to the function.
+
+I like Team 4's work that uses "apply" rather than for loop.
+
+```{r}
+vector.c<- function(any.matrix, c) {
+  if (c < 1 || c > ncol(any.matrix)) {
+    stop("Error in c. Please try a value >=1, or a value smaller than number of column rows.") ## This are the requirements
+  }
+  Majority<- function(x) {
+   y <- sum(x[1:c])/c
+    ifelse(y > 0.5, 1, 0)
+  }
+  apply(any.matrix, 1, Majority)
+}
+```
+
+I also like Team 6's work. They did a pretty comprehensive check on the input parameters.
+
+```{r}
+rowsWithMajorityOnes <- function(m, c) {
+  
+  if (!is.matrix(m)){
+    return("Error. First parameter must be a matrix.")
+  }
+  else if (any((m==0)+(m==1) != 1)){
+    return("Error. Matrix can only contain values of 0 or 1.")
+  }
+  if (c > dim(m)[2]){
+    return("Error. Second parameter c must not be greater than number of columns in matrix.")
+  }
+  
+  v = (length=dim(m)[1])
+  for (i in 1:dim(m)[1]) {
+    v[i] <- ifelse(sum(m[i,1:c])>=(c/2), 1, 0)
+ }
+  return(v)
+}
+```
+
+
+## Q2
+
+In general, students did a wonderful job in crawling the data. Just a few minor issues to comment.
+
+### follow_link
+
+Some teams used follo_link function in their codes to automatically navigate to the hyperlink in each property listed on the page. This is a very efficient way, but you must be aware of the potential risk involved. If one day, SRX added some other hyperlinks to the page, your function will no longer work. You may need to add in some codes to check the integrity of the page contents, which will prompt warning message when the information crawled is no longer right.
+
+### Multi functions for one page
+
+There are some teams who wrote multi functions to crawl different information from the same page, which will result in multiple accesses and readings to the same page. This is not only inefficient, but also increases the burden on SRX server. Try to crawl each page once, read the HTML page into one object, then write functions to crawl different parts of this object, if you want.
+
+### Data Management
+
+Some teams store the final result as List, which is not ideal. List is flexible and powerful, yet its flexibility also means somewhat unstructured. We need to store the result in data frame in order to have the well structured data for future study.
+
+### Data cleanup
+
+It is not a requirement in this assignment. But please take note that data in the pages of SRX is dynamic. A property may apprear on the first page now, but appear on the 10th page 1 second later. This will result in duplicated or missing data in your final result. You need to clean up your data by removing duplicate records.
+
+I am showing Team 6's solution below for your reference.
+
+```{r}
+library(magrittr)
+library(dplyr)
+library(rvest)
+
+host_url = 'https://www.srx.com.sg'
+
+# this function will fetch all listing nodes and return them as a list
+fetch_property_nodes = function(page) {
+    url = paste(host_url, "/search/sale/residential?page=", page, sep = "")
+    srx_html = read_html(url)
+    listing = html_nodes(srx_html, ".listingDetailTitle")
+    if(length(listing) == 0)
+        return(c('Done'))
+    return(listing)
+}
+
+# this is just a try-catch wrapper on top of ^
+trycatch_fetch_property_notes = function(n) {
+    result = tryCatch({
+        return (fetch_property_nodes(n))
+    }, warning = function(n) {
+        print(paste("Warning in crawling the ", n, "th page of SRX", sep = ""))
+    }, error = function(n) {
+        print(paste("Error in crawling the ", n, "th page of SRX", sep = ""))
+        return(c('Done'))
+    }, finally = function(n) { 
+    })
+    return (result)
+}
+
+# this function takes in the node's 1) details 2) facilities and 3) agent name and spits out a single-row df for entry
+get_df_from_node_list = function(listing_info_node, facilities_info_node, agent_name) {
+    labels = listing_info_node %>% html_children %>% `[`(c(T, F)) %>% html_text %>% takeout_last_char
+    values = listing_info_node %>% html_children %>% `[`(c(F, T)) %>% html_text %>% remove_tabs
+    facilities = facilities_info %>% html_children %>% html_text %>% remove_tabs %>% paste(collapse=' | ')
+    
+    data_list = list()
+    data_list[labels] = values
+    data_list['Facilities'] = facilities
+    data_list['Agent'] = agent_name
+    
+    data_list %>% as.data.frame
+}
+
+# simple function to remove spaces of all kinds
+remove_tabs = function(x) {
+    gsub("([\t]|[\r\n])", "", x)
+}
+
+# simple function to remove the colon from the label
+takeout_last_char = function(x) {
+    x %>% substr(1, nchar(x) - 1)
+}
+
+# the real script, 
+# 1. calls a query for each page
+# 2. for every listing, call a query to pull data about listing
+# 3. feeds listing data into get_df_from_node_list to get a single row df
+# 4. stitch df into main df
+# 5. breaks when done
+#
+# this function can be further refactored for SLAP (not important for this mod)
+
+n = 1L
+prop_df = data.frame()
+
+while(n < 100000){ #we use 100,000 instead of TRUE so that even if the code fails, we don't go on forever
+    property = trycatch_fetch_property_notes(n)
+    
+    if (property[1] == 'Done') {
+        break
+    }
+    
+    for (i in 1:length(property)) {
+        listing_url = paste(host_url, html_attr(property[i], 'href'), sep="")
+        listing_html = read_html(listing_url)
+        listing_data = html_nodes(listing_html, '.listing-about-main')
+        listing_info = html_nodes(listing_data[1], 'p')
+        facilities_info = listing_data[2]
+        agent_name = listing_html %>% html_node('.featuredAgentName') %>% html_text
+        row_df = get_df_from_node_list(listing_info, facilities_info, agent_name)
+        prop_df = suppressWarnings(bind_rows(prop_df, row_df))
+    }
+    
+    n = n + 1
+}
+
+prop_df %>% head
+
+prop_df %>% write.csv(file='srx.csv')
+```

@@ -1,0 +1,337 @@
+---
+title: "Advanced data visualization"
+author: "Dr. Liu Qizhang"
+date: "28 August 2016"
+output: html_document
+---
+
+In last lesson, you have seen some basic visualization codes to help you explore data. The theme of last lesson is on data while visulization serves as a tool to explore it. In this lesson, we are going to focus on visualzation itself and teach some basic techniques on how to make your figures more appealing. We are also going to cover how to plot charts on maps.
+
+#Chart Components
+
+In this section, we will cover how to configure various components of charts in *ggplot2*. We are going to use *custdata* again.
+
+```{r}
+custdata<-read.table('custdata.tsv',header=T,sep = '\t')
+```
+
+##Title
+
+Chart title is set by using *ggtitle* function.
+
+```{r}
+library(ggplot2)
+g1 = ggplot(data=custdata, aes(x=age,y=income)) + geom_point(color="blue") + ggtitle("Age vs Income")
+g1
+```
+
+##Axis
+
+As you can see above, R will give default x and y labels based on the variable names. You can overwrite these by using *labs()* function.
+
+```{r}
+g2 = g1 + labs(x="Customer Age", y="Annual Income")
+g2
+```
+
+##Limit an axis a range
+
+Sometimes if necessary you may want to limit an axis to a specific range. There are three ways to achieve this.
+
+```{r}
+#Method 1. use xlim
+g3 = g2 + xlim(c(0,100))
+g3
+
+#Method 2. use scale_x_continous. This method will remove all points outside the range
+g4 = g2 + scale_x_continuous(limits = c(0,100))
+g4
+
+#Method 3. use coord_cartesian. This method wil adjust the display area
+g5 = g2 + coord_cartesian(xlim=c(0,100))
+g5
+```
+
+##Use a function to alter labels
+
+In last lesson, you have seen how to add dollar sign to income labels. A more advanced technique is to use a function to alter labels in whatever format you want. The following is an example showing how to do that.
+
+```{r}
+g6<-ggplot(custdata) + geom_bar(aes(x=health.ins)) 
+g7<-g6+scale_x_discrete(labels = function(x) ifelse(x, "Has Insurance", "Without Insurance"))
+g7
+```
+
+
+##Colour points by categorical variable
+
+We may colour data points on a chart by an independent categorical variable. For example, we may want to see if gender make a difference in the relationship between income and age. This could be achieved by:
+
+```{r}
+g8 <-  ggplot(data=custdata, aes(x=age,y=income,color=factor(sex))) + geom_point()
+g8
+```
+
+You may manually set the colours.
+
+```{r}
+g8_1<-g8 + scale_color_manual(values=c("yellow","blue"))
+g8_1
+```
+
+#Working with theme
+
+So far, we have been talking about basic components of R charts. We can further configure the outlook of these charts by using *theme()* function, which allow us to modify the theme settings for every part of a chart. We will cover some most common scenarios in this section. You are encouraged to explore more on your own.
+
+##Title theme
+
+Title is basically text. Configure title thus is to do with setting right arguments in *element_text* component. Below are some examples.
+
+```{r}
+g9<-g1 + theme(title=element_text(size=20,face="bold",color="green"))
+g9
+```
+
+As you can see, all the titles are affected by this setting. If we want to change only the plot title, it can be done like the following:
+
+```{r}
+g10 <- g1 + theme(plot.title=element_text(size=20,face="bold",color="green"))
+g10
+```
+
+##Tick text theme
+
+We can also change the theme of tick text.
+
+```{r}
+g11 <- g7 + theme(axis.text.x=element_text(angle=50,size=10,vjust = 0.5))
+g11
+```
+
+##Background colour
+
+We can also change the background colour of a chart.
+
+```{r}
+#this will change the background colour of the whole panel
+g12 <- g1 + theme(panel.background = element_rect(fill = "yellow"))
+g12
+
+#this will change the backgrond colour of the plot area 
+g13 <- g1 + theme(plot.background = element_rect(fill = "yellow"))
+g13
+```
+
+##Grid line theme
+
+Grid lines can be configured using panel.grid.* series.
+
+```{r}
+g14 <- g1 + theme(panel.grid.major = element_line(color = "yellow", size = 2), panel.grid.minor=element_line(color = "blue"))
+g14
+```
+
+#Multi-panel plots
+
+Sometimes, it is more visual effective to put some panels side by side for comparison. 
+
+```{r}
+g15 <-  ggplot(data=custdata, aes(x=age,y=income)) + geom_point() + facet_wrap(~sex,ncol = 1)
+g15
+```
+
+You may try other layout functions, such as *facet_grid*.
+
+Please refer to [Beautiful plotting in R: A ggplot2 cheatsheet]([http://zevross.com/blog/2014/08/04/beautiful-plotting-in-r-a-ggplot2-cheatsheet-3/) for more information.
+
+```
+Exercise
+
+Use LearningANTS data to do good visualization.
+```
+
+#Other Packages
+
+There are some other R packages that you may consider for data visualization. One package to recommend is *lattice*. In this session, we will show some examples on how to use it. We are going to use "Lasagna Triers.csv", which stores data about customer profiles on lasagna triers.
+
+```{r}
+colclasses = c("integer","integer","numeric","numeric","factor","numeric","numeric","factor","factor","factor","integer","factor","factor")
+triers <- read.csv("Lasagna Triers.csv",header = TRUE, colClasses = colclasses)
+str(triers)
+```
+
+##Histogram
+
+*lattice* allows us to plot histogram easily. For example,
+
+```{r}
+library(lattice)
+histogram(~Income, data=triers)
+```
+
+It also allows you to condition histograms on the value of a third party categorical variable. For example,
+
+```{r}
+#Compare income between genders
+histogram(~Income | Gender, data=triers)
+
+#Compare income among neighborhoods. It is more effective to show the comparison in this layout
+histogram(~Income | Nbhd, data=triers, layout=c(1,3))
+```
+
+##Density plot
+
+Similar to *histogram*, you can develop density plot easily.
+
+```{r}
+#Compare car value between genders
+densityplot(~CarValue | Gender, data = triers, layout=c(1,2), col="black")
+```
+
+##Dot plot
+
+This is an example using dot plot. 
+
+```{r}
+dotplot(~CarValue | Nbhd, data = triers, layout=c(1,3))
+```
+
+##Advanced scatter plot
+
+Using *lattice*, it is very convenient to develop conditional scatter plots on a third party categorical variable. 
+
+```{r}
+xyplot(Income~CarValue | Gender, data = triers, layout=c(1,2))
+```
+
+##Box plot
+
+We can build conditional box plots using *bwplot* function in *lattice*.
+
+```{r}
+bwplot(Weight~factor(Gender) | factor(Nbhd), data = triers, xlab = "Gender")
+```
+
+```{r}
+t1 <- tapply(triers$Income, INDEX =list(cut(triers$Weight,breaks=10), cut(triers$CarValue,breaks=10)), FUN=mean,na.rm =TRUE)
+t1
+levelplot(t1)
+levelplot(t1, scales=list(x=list(rot=90)))
+t2 <- tapply(triers$Income, INDEX =list(triers$Gender, cut(triers$CarValue,breaks=10)), FUN=mean,na.rm =TRUE)
+levelplot(t2, scales=list(x=list(rot=90)))
+```
+
+```
+Excercise
+
+Use the three data sets in Chapter 2 of "Data Mining and Business Analytics with R" to do data visualization and develop insights.
+```
+
+#Visualizing spatial data
+
+"ggmap" is a package developed on top of *ggplot2* for visualizing spatial data. It situates contextual information of various kinds of  static maps in the *ggplot2* plotting framework. The result is an easy,
+consistent way of specifying plots which are readily interpretable by both expert and audience and
+safeguarded from graphical inconsistencies by the layered grammar of graphics framework. 
+
+
+##Concept of ggmap
+
+One advantage of making the plots with ggplot2 is the layered grammar of graphics on which ggplot2
+is based. By definition, the layered grammar demands that every
+plot consist of five components :
+
+* a default dataset with aesthetic mappings,
+* one or more layers, each with a geometric object ("geom"), a statistical transformation ("stat"),
+and a dataset with aesthetic mappings (possibly defaulted),
+* a scale for each aesthetic mapping (which can be automatically generated),
+* a coordinate system, and
+* a facet specification.
+
+Since ggplot2 is an implementation of the layered grammar of graphics, every plot made with ggplot2
+has each of the above elements. Consequently, ggmap plots also have these elements, but certain
+elements are fixed to map components : the x aesthetic is fixed to longitude, the y aesthetic is fixed to
+latitude, and the coordinate system is fixed to the Mercator projection.
+
+A basic framework is to get the map and then overlay it with other ggplot2 charts. The following example illustrates the idea.
+
+```{r}
+library(ggmap)
+#you can get lon and lat of a location by zip code
+#pizzahut.location$Location <- paste("Singapore", pizzahut.location$Zipcode, sep = " ")
+
+pizzahut.location <- read.csv("PizzaHut.csv",header = TRUE, colClasses = c("character","character","factor","character","numeric","numeric"))
+
+#Define the map and the base_layer, whihc is equivalent to ggplot in previous sections
+m1 <- qmap("Singapore", base_layer=ggplot(aes(x=lon, y = lat), data=pizzahut.location), zoom=11, scale=2)
+
+#Now plot the points, and colour the points based on regions
+m2<-m1 + geom_point(aes(color=Region))
+m2
+```
+
+You can configure how to display the points just like you do it in normal ggplot2 charts. For example, suppose we want to plot the sizes of the points based on a third party variable, you can do it in *geom_point* function alone.
+
+```{r}
+pizzahut.location$Visits = round(rnorm(nrow(pizzahut.location),15000,5000))
+m1 <- qmap("Singapore", base_layer=ggplot(aes(x=lon, y = lat), data=pizzahut.location), zoom=11, scale=2)
+m3 <- m1 + geom_point(aes(color=Region, size=Visits))
+m3
+```
+
+You can overlay this further by other chart types. For example,
+
+```{r}
+pizzahut.location$Visits = round(rnorm(nrow(pizzahut.location),15000,5000))
+m1 <- qmap("Singapore", base_layer=ggplot(aes(x=lon, y = lat), data=pizzahut.location), zoom=11, scale=2)
+m4 <- m1 + geom_point(aes(color=Region)) + geom_path()
+m4
+```
+
+
+```{r}
+pizzahut.location$Visits = round(rnorm(nrow(pizzahut.location),15000,5000))
+m1 <- qmap("Singapore", base_layer=ggplot(aes(x=lon, y = lat), data=pizzahut.location), zoom=11, scale=2)
+m5 <- m1 + stat_bin2d(aes(color=Region,fill=Region)) 
+m5
+```
+
+
+Please refer to [ggmap: sptial visualization with ggplot2](https://journal.r-project.org/archive/2013-1/kahle-wickham.pdf) for more details.
+
+##Different types of maps
+
+*ggmap* can work on other maps as well and can be plotted in various types.
+
+Sources of maps:
+
+* Google Maps - "google"
+* OpenStreetMap - "osm"
+* Stamen Maps - "stamen"
+* CloudMade maps - "cloudmade"
+
+Map types:
+
+* Google map - "terrain","terrain-background", "satellite", "roadmap","hybrid"
+* Stamen maps - "terrain", "watercolor", "toner"
+* cloudmade maps - a positive integer, see ?get_cloudmademap
+
+Let's try a few combinations here:
+
+```{r}
+pizzahut.location$Visits = round(rnorm(nrow(pizzahut.location),15000,5000))
+m1 <- qmap("Singapore", maptype="satellite", base_layer=ggplot(aes(x=lon, y = lat), data=pizzahut.location), zoom=11, scale=2)
+m6 <- m1 + geom_point(aes(color=Region)) 
+m6
+```
+
+##Polygons shaping 
+
+Ploting charts on a map is useful for many spatial analytics. However, a more appealing visulization is to shape areas in a map with regards to different attributes. Packages "raster" and "rgdal" can be used for this purpose. 
+
+"CO2Emission.R" is an exmaple to be used.
+
+```
+Exercise
+
+Obtain spatial data and other government data from data.gov.sg and develop a visulation on Singapore map.
+```

@@ -1,0 +1,122 @@
+---
+title: "Lesson 3"
+author: "Dr. Liu Qizhang"
+date: "27 January 2018"
+output: html_document
+---
+
+# HR Analysis
+
+I am going to use HR data case to let students practice apply functions. First, let students raise questions about HR issues that the company may be facing. Then encourage them to use R to analyse the data.
+
+```{r}
+#Read in data
+HR<-read.csv("HR_data.csv")
+head(HR)
+dim(HR)
+```
+
+##Salary analysis
+
+In this section, we will analyse the impact of salary on employees' decision.
+
+###Measure by absolute number
+
+Learning objective: table function.
+
+```{r}
+#Count the number of employees leaving by different salary categories
+HR.Left <- HR[HR$left==1,]
+dim(HR.Left)
+table(HR.Left$salary)
+
+#Alternative method
+table(HR$salary,HR$left)
+```
+
+From the result, it shows that low salary has the most number of employees left. Can we conclude that people left company because they are not satisfied with their salary?
+
+###Measure by relative ratio
+
+Learning objective: 2-dimensional table function, apply, and function.
+
+Let student figure out also how to convert table result into data frame.
+
+```{r}
+#Find the ratio of employees leaving by different salary categories
+stats.by.salary <- as.data.frame.matrix(table(HR$salary,HR$left))
+stats.by.salary
+```
+
+Now, add a row to represent the ratio.
+
+```{r}
+stats.by.salary$ratio<-stats.by.salary$`1` / (stats.by.salary$`1`+stats.by.salary$`0`)
+```
+
+Note the display of numbers in stats.by.salary. This is because of data type coercion.
+
+Take this opportunity to teach student about function.
+
+```{r}
+#define a function called ratio
+ratio <- function(x) {return (x[2]/(x[1]+x[2]))}
+
+#now apply ratio function on stats.by.salary
+apply(stats.by.salary,1,ratio)
+```
+
+The ratio is a better way to explain that salary might be a decisive factor in people's decision. 
+
+###Salary effect by departments
+
+Learning Objective: split, lapply
+
+The immediate question will then be: is this phenomenom common among all departments? How do people from various departments differ in their attitudes toward salary?
+
+```{r}
+list.by.dept <- split(HR,HR$dept)
+```
+
+Use this opportunity to introduce "for" loop.
+
+```{r}
+method1 <- function(data){
+    list.by.dept <- split(data,data$dept)
+    result <- data.frame(high=numeric(0),low=numeric(0),medium=numeric(0))
+    for(i in 1:length(list.by.dept))
+    {
+        HR.i <- list.by.dept[[i]]
+        stats.by.salary.i <- as.data.frame.matrix(table(HR.i$salary,HR.i$left))
+        a<-apply(stats.by.salary.i,1,ratio)
+        result[i,] <- a
+        rownames(result)[i] <- names(list.by.dept)[i]
+    }
+    result
+}
+system.time(method1(HR))
+```
+
+Alternatively, we can use lapply to achieve the same objective.
+
+```{r}
+#create a function with a list element of list.by.dept as input parameter
+#return a vector as result
+method2<-function(data){
+    list.by.dept <- split(data,data$dept)
+    ratio.data <- function(x)
+    {
+        df <- x
+        y<-as.data.frame.matrix(table(df$left,df$salary))
+        return(apply(y,2,ratio))
+    }
+    
+    result <- lapply(list.by.dept,ratio.data)
+    result <- data.frame(matrix(unlist(result),ncol=3,byrow=TRUE))
+    colnames(result) <- c("High","Low","Medium")
+    rownames(result) <- names(list.by.dept)
+}
+system.time(method2(HR))
+```
+
+Comparing method1 and method 2, you can see that lapply is more efficient than for loop.

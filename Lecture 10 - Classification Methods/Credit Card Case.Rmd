@@ -1,0 +1,157 @@
+---
+title: "Credit Card Case"
+author: "Dr. Liu Qizhang"
+date: "4 April 2018"
+output: html_document
+---
+
+##Case Background
+
+The datasets contains transactions made by credit cards in September 2013 by european cardholders. This dataset present transactions that occurred in two days, where we have 492 frauds out of 284,807 transactions. The dataset is highly unbalanced, the positive class (frauds) account for 0.172% of all transactions.
+
+It contains only numerical input variables which are the result of a PCA transformation. Unfortunately, due to confidentiality issues, we cannot provide the original features and more background information about the data. Feature 'Class' is the response variable and it takes value 1 in case of fraud and 0 otherwise.
+
+This case is about applying classification methods on highly imbalanced dataset.
+
+```{r}
+colclass <- c(rep("numeric",30),"factor")
+data<-read.csv("creditcard.csv",colClasses = colclass)
+dim(data)
+table(data$Class)
+
+#Select about 10% of the original data for analysis to save computational time
+set.seed(123)
+sample <- sample(c(TRUE,FALSE),nrow(data),prob = c(0.1,0.9),replace = TRUE)
+data<-data[sample,]
+table(data$Class)
+```
+
+You can see that this data is extremely unbalanced, which means even a naive method to classify all cases as "0" will achieve very high accuracy. 
+
+
+##Without special treatment of the data
+
+
+```{r}
+set.seed(123)
+sample <- sample(c(TRUE,FALSE),nrow(data),prob = c(0.75,0.25),replace = TRUE)
+
+data.train <- data[sample, ]
+data.test <- data[!sample, ]
+```
+
+###Logistic Regression
+
+```{r}
+lr1 <- glm(Class ~ ., data=data.train, family=binomial())
+summary((lr1))
+```
+
+Prediction accuracy:
+
+```{r}
+data.train$Predict <- predict(lr1,newdata = data.train,type="response")
+library(ggplot2)
+ggplot(data.train, aes(x=Predict, color=Class,linetype=Class)) + geom_density()
+```
+
+This graph as well as all other graph functions taught in previous lessons are not working.
+
+```{r}
+#Use ROCR package to plot ROC curve and calculate AUC
+library(ROCR)
+prob <- predict(lr1, newdata=data.train, type="response")
+pred <- prediction(prob, data.train$Class)
+perf <- performance(pred, measure = "tpr", x.measure = "fpr")
+plot(perf)
+auc <- performance(pred, measure = "auc")
+auc <- auc@y.values[[1]]
+auc
+```
+
+```{r}
+library(e1071)
+library(caret)
+data.train$predicted.class <- as.factor(ifelse(data.train$Predict>0.002,1,0))
+confusionMatrix(data.train$predicted.class,data.train$Class)
+```
+
+```{r}
+#If we use majority rule
+data.train$predicted.class <- as.factor(ifelse(data.train$Predict>0.5,1,0))
+confusionMatrix(data.train$predicted.class,data.train$Class)
+```
+
+You can observe significant worse performance in terms of identifying fraudulent cases.
+
+Applying the model on test data.
+
+```{r}
+data.test$Predict <- predict(lr1,newdata = data.test,type="response")
+data.test$predicted.class <- as.factor(ifelse(data.test$Predict>0.002,1,0))
+confusionMatrix(data.test$predicted.class,data.test$Class)
+```
+
+The result is not bad.
+
+
+```{r}
+fit.svm <-svm(Class ~., data=data.train)
+svm.predict <- predict(fit.svm,data.train)
+confusionMatrix(svm.predict,data.train$Class)
+```
+
+```{r}
+library(randomForest)
+fit.forest <- randomForest(Class ~., data=data.train, na.action = na.roughfix, importance=TRUE)
+rf.predict <- predict(fit.forest,data.train)
+confusionMatrix(rf.predict,data.train$Class)
+
+rf.predict <- predict(fit.forest,data.test)
+confusionMatrix(rf.predict,data.test$Class)
+```
+
+
+```{r}
+data.train$predicted.class <- NULL
+data.train$Predict <- NULL
+ctrl <- trainControl(method = "repeatedcv", 
+                     number = 10, 
+                     repeats = 10, 
+                     verboseIter = FALSE,
+                     sampling = "down")
+
+set.seed(123)
+model_rf_under <- caret::train(Class ~ .,
+                         data = data.train,
+                         method = "LogitBoost",
+                         preProcess = c("scale", "center"),
+                         trControl = ctrl)
+
+final_under <- data.frame(actual = data.test$Class,
+                    predict(model_rf_under, newdata = data.test, type = "prob"))
+final_under$predict <- as.factor(ifelse(final_under$X0 < 0.5, 1, 0))
+confusionMatrix(final_under$predict, final_under$actual)
+
+```
+
+```{r}
+data.train$predicted.class <- NULL
+data.train$Predict <- NULL
+ctrl <- trainControl(method = "repeatedcv", 
+                     number = 10, 
+                     repeats = 10, 
+                     verboseIter = FALSE,
+                     sampling = "down")
+
+set.seed(123)
+model_rf_under <- caret::train(Class ~ .,
+                         data = data.train,
+                         method = "rf",
+                         preProcess = c("scale", "center"),
+                         trControl = ctrl)
+
+final_under <- data.frame(actual = data.test$Class,
+                    predict(model_rf_under, newdata = data.test, type = "prob"))
+final_under$predict <- as.factor(ifelse(final_under$X0 > 0.5, 1, 0))
+```

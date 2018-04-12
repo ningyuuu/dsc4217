@@ -1,0 +1,497 @@
+---
+title: "Text Analytics"
+author: "Dr. Liu Qizhang"
+date: "10 March 2017"
+output: html_document
+---
+
+Traditionally, machine learning was working on structured data, especially data from well designed database, which could be studied systematically with beautiful mathematics theories and computational algorithms. Today with advance of technology, in particular social media and Internet of Things, data could be collected in various ways in many different forms. More importantly, data becomes more and more unstructured. There is a rising demand in the capability of analyzing unstructured data, one of which is text analytics. In this chapter, we are going to introduce some very basic packages and functions in R for text analytics.
+
+#Data Preparation
+
+Text analytics is most commonly used in analysing social media. There are packages created specifically for developers to retrieve data from Twitter (https://sites.google.com/site/miningtwitter/basics/getting-data/by-twitter
+), Facebook (https://bigdataenthusiast.wordpress.com/2016/03/19/mining-facebook-data-using-r-facebook-api/), Instagram (https://www.r-bloggers.com/analyze-instagram-with-r/), etc. You may do your own research if you are interested in a particular social media. I will focus more on analysing text data when it is ready.
+
+In text analytics, *tm* package is one of the most commonly used packages. A collection of text documents are stored in a structure called *Corpus* for exploration. The default implementation is the so-called **VCorpus** (short for Volatile Corpus) which realizes a semantics as known from most R objects: corpora are R objects held fully in memory. We denote this as volatile since once the
+R object is destroyed, the whole corpus is gone. Such a volatile corpus can be created via the constructor VCorpus(x, readerControl). Another implementation is the **PCorpus** which implements a Permanent Corpus semantics, i.e., the documents are physically stored outside of R (e.g., in a database), corresponding R objects are basically only pointers to external structures, and changes to the underlying corpus are reflected to all R objects associated with it. Compared to the volatile corpus the corpus encapsulated by a permanent corpus object is not destroyed if the corresponding R object is released. 
+
+There are many ways to construct Corpus object in R. I will just introduce two of them using the following examples.
+
+##Case 1. Twitter Data in List
+
+Please download "rdmTweets.Rdata" file from IVLE and put it to your working directory. This file contains a list of tweets retrieved via functions provided in package *twitteR*. List is a common way of storing texts of storing data collected via such interface functions.
+
+```{r}
+library(tm)
+library(twitteR)
+#Load the data into R environment
+load("rdmTweets.Rdata")
+
+#Convert tweets into a data frame
+tweets <- do.call("rbind", lapply(rdmTweets, as.data.frame))
+
+# build a corpus, and specify the source to be character vectors.
+#VectorSource deals with the case that the source is character vectors
+#There are two other similar functions:
+#DirSource - Deal with texts stored in a directory
+#DataframeSource - Deal with texts stored in data frame
+tweetCorpus <- Corpus(VectorSource(tweets$text))
+```
+
+##Case 2. Movie data stored as documents in a directory
+
+Please download *review.zip* file from IVLE and unzip it to your working directory. It contains movie reviews downloaded from the Internet Movie Database (IMDb). The original source for these data includes 50,000 movie reviews. What we are analysing here is just a subset of the data, organised as training and test data sets. 
+
+```{r}
+#Let's first load data stored in /reviews/train/unsup/, which are the unsupervised data
+directory.location <- paste(getwd(),"/reviews/train/unsup/",sep = "")  
+
+#Read in data and stored it as a Corpus
+movie.unsup.corpus <- Corpus(DirSource(directory.location, encoding = "UTF-8"),
+  readerControl = list(language = "en_US"))
+```
+
+##Inspecting Corpus
+
+A Corpus object is basically a special list. You may use many functions related to list on Corpus to view the details stored in it.
+
+```{r}
+#check the number of documents stored in a corpus
+length(tweetCorpus)
+length(movie.unsup.corpus)
+
+#Have an overview of (part of) the corpus
+inspect(tweetCorpus)
+inspect(movie.unsup.corpus[1])
+
+#view content of a particular document in a corpus
+tweetCorpus[[1]]$content
+
+#You can even use lapply function on corpus
+tweet.list <- lapply(tweetCorpus,as.character)
+```
+
+##Data Transformation
+
+One of the key steps in text analytics is to clean up and transform data into a form that is suitable for analysis. Transformations are done via the *tm_map()* function which applies (maps) a function to all elements of the corpus. Basically, all transformations work on single text documents and tm_map() just applies them to all documents in a corpus. The following codes work on movie review data. Please apply the same on tweets data yourself.
+
+```{r}
+#Remove white space
+movie.unsup.corpus <- tm_map(movie.unsup.corpus, stripWhitespace)
+
+#Convert all words to lower case
+movie.unsup.corpus <- tm_map(movie.unsup.corpus, content_transformer(tolower))
+
+#Remove stopwords.
+#Stopwords usually refer to the most common 
+movie.unsup.corpus <- tm_map(movie.unsup.corpus, removeWords, stopwords("english"))
+
+#Remove numbers
+movie.unsup.corpus <- tm_map(movie.unsup.corpus, removeNumbers)
+
+#Remove punctuations
+movie.unsup.corpus <- tm_map(movie.unsup.corpus, removePunctuation)
+```
+
+You may write your own function to transform the data in a corpus. For example, some of the tweets contain URLs, which should be removed so that text analytics can focus more on true comments. This could be done like the following:
+
+```{r}
+#Define a function to replace any text starting with http by empty string
+removeURL <- function(x) gsub("http[[:alnum:][:punct:]]*", "", x) 
+
+#Then apply this function to tweets corpus
+tweetCorpus <- tm_map(tweetCorpus, removeURL)
+```
+
+In many applications, words need to be stemmed to retrieve their radicals, so that various forms
+derived from a stem would be taken as the same when counting word frequency. For example, "drop", "drops", "dropping", and "dropped" should have the same meaning and thus should be treated the same.
+
+```{r}
+library(SnowballC)
+
+#stem words
+movie.unsup.corpus <- tm_map(movie.unsup.corpus, stemDocument, language = "english")
+
+#inspect one document after stemming
+movie.unsup.corpus[[1]]$content
+```
+
+You may find some funny words in this document after stemming. This is a problem with stemming. For example, someone in the review may have a typo "stori". R recognises that "stori" is equivalent to "story", then it may use either "stori" or "story" to replace all words of "stori" and "story" appearing in all the documents. We may have to manually rectify the words later in our conclusion. *tm* package has a built-in function *stemCompletion* to automatically do it, but it consumes a lot of memory and thus not applicable for this case.
+
+##Further remove meaningless words
+
+With the current corpus, we can construct a *TermDocumentMatrix*, which is a matrix recording the frequency of each term in each document. 
+
+```{r}
+initial.tdm <- TermDocumentMatrix(movie.unsup.corpus)
+dim(initial.tdm)
+```
+
+As you can see, there are lots of terms contained in all the documents. Some of them may just appear once or a few times (high sparity) and thus don't contribute to the measurement of sentiment at all. For example,
+
+```{r}
+inspect(initial.tdm[1:10,1:10])
+```
+
+As you can see, some words are just meaningless or only appear once in all the documents. So we may remove those words with high sparity first.
+
+```{r}
+#Remove terms with sparity above 0.96. 
+#Each term is associated with a sparsity which measures how sparse this term appears in the corpus.
+#The sparsity measure ranges from 0 to 1, with numbers closer to 1 meaning a term can be more sparse, #i.e. less present in the corpus but still included in the matrix. Here, when sparse is set as 0.96, 
+#then all terms with sparsity above 0.96 will be removed
+remove.sparse.tdm <- removeSparseTerms(initial.tdm, sparse = 0.96)
+dim(remove.sparse.tdm)
+```
+
+Now, the number of terms remaining has dropped significantly. There are multiple ways for us to take a look (finally) the most frequent words in the reviews.
+
+```{r}
+#method 1: view all the remaining terms
+#terms(remove.sparse.tdm)
+
+#method 2: view terms with frequency above certain number
+findFreqTerms(remove.sparse.tdm,lowfreq = 50)
+
+#method 3: calculate the row sums of the matrix, which is the frequency of each term. Then sort the
+#result in descending order
+freq <- sort(rowSums(as.matrix(remove.sparse.tdm)), decreasing=TRUE)
+freq
+
+#Method 4: Visualise the top words using wordcloud
+library(wordcloud)
+wordcloud(movie.unsup.corpus,max.words=100,random.order=FALSE,colors=brewer.pal(8, "Dark2"))
+```
+
+We can now rectify the words in corpus which were distorted due to stemming performed previously.
+
+```{r}
+#Define a function to replace a text 
+replaceWord <- function(x) gsub("genr", "generic", x) 
+
+#Then apply this function to movie corpus
+movie.unsup.corpus <- tm_map(movie.unsup.corpus, content_transformer(replaceWord))
+
+#Define a function to replace a text 
+replaceWord <- function(x) gsub("favorit", "favorite", x) 
+
+#Then apply this function to movie corpus
+movie.unsup.corpus <- tm_map(movie.unsup.corpus, content_transformer(replaceWord))
+
+#Define a function to replace a text 
+replaceWord <- function(x) gsub("littl", "little", x) 
+
+#Then apply this function to movie corpus
+movie.unsup.corpus <- tm_map(movie.unsup.corpus, content_transformer(replaceWord))
+
+#Define a function to replace a text 
+replaceWord <- function(x) gsub("believ", "believe", x) 
+
+#Then apply this function to movie corpus
+movie.unsup.corpus <- tm_map(movie.unsup.corpus, content_transformer(replaceWord))
+
+#Define a function to replace a text 
+replaceWord <- function(x) gsub("funni", "funny", x) 
+
+#Then apply this function to movie corpus
+movie.unsup.corpus <- tm_map(movie.unsup.corpus, content_transformer(replaceWord))
+
+#Define a function to replace a text 
+replaceWord <- function(x) gsub("noth", "nothing", x) 
+
+#Then apply this function to movie corpus
+movie.unsup.corpus <- tm_map(movie.unsup.corpus, content_transformer(replaceWord))
+
+#Define a function to replace a text 
+replaceWord <- function(x) gsub("beauti", "beautiful", x) 
+
+#Then apply this function to movie corpus
+movie.unsup.corpus <- tm_map(movie.unsup.corpus, content_transformer(replaceWord))
+
+#Define a function to replace a text 
+replaceWord <- function(x) gsub("pretti", "pretty", x) 
+
+#Then apply this function to movie corpus
+movie.unsup.corpus <- tm_map(movie.unsup.corpus, content_transformer(replaceWord))
+
+#Define a function to replace a text 
+replaceWord <- function(x) gsub("complet", "complete", x) 
+
+#Then apply this function to movie corpus
+movie.unsup.corpus <- tm_map(movie.unsup.corpus, content_transformer(replaceWord))
+
+#Define a function to replace a text 
+replaceWord <- function(x) gsub("especi", "especial", x) 
+
+#Then apply this function to movie corpus
+movie.unsup.corpus <- tm_map(movie.unsup.corpus, content_transformer(replaceWord))
+
+#Define a function to replace a text 
+replaceWord <- function(x) gsub("surpris", "surprise", x) 
+
+#Then apply this function to movie corpus
+movie.unsup.corpus <- tm_map(movie.unsup.corpus, content_transformer(replaceWord))
+
+#Define a function to replace a text 
+replaceWord <- function(x) gsub("mysteri", "mystery", x) 
+
+#Then apply this function to movie corpus
+movie.unsup.corpus <- tm_map(movie.unsup.corpus, content_transformer(replaceWord))
+
+#Define a function to replace a text 
+replaceWord <- function(x) gsub("absolut", "absolute", x) 
+
+#Then apply this function to movie corpus
+movie.unsup.corpus <- tm_map(movie.unsup.corpus, content_transformer(replaceWord))
+
+#Define a function to replace a text 
+replaceWord <- function(x) gsub("alon", "alone", x) 
+
+#Then apply this function to movie corpus
+movie.unsup.corpus <- tm_map(movie.unsup.corpus, content_transformer(replaceWord))
+
+#Define a function to replace a text 
+replaceWord <- function(x) gsub("amaz", "amaze", x) 
+
+#Then apply this function to movie corpus
+movie.unsup.corpus <- tm_map(movie.unsup.corpus, content_transformer(replaceWord))
+
+#Define a function to replace a text 
+replaceWord <- function(x) gsub("convinc", "convince", x) 
+
+#Then apply this function to movie corpus
+movie.unsup.corpus <- tm_map(movie.unsup.corpus, content_transformer(replaceWord))
+
+#Define a function to replace a text 
+replaceWord <- function(x) gsub("definit", "definity", x) 
+
+#Then apply this function to movie corpus
+movie.unsup.corpus <- tm_map(movie.unsup.corpus, content_transformer(replaceWord))
+
+#Define a function to replace a text 
+replaceWord <- function(x) gsub("emot", "emotion", x) 
+
+#Then apply this function to movie corpus
+movie.unsup.corpus <- tm_map(movie.unsup.corpus, content_transformer(replaceWord))
+
+#Define a function to replace a text 
+replaceWord <- function(x) gsub("terribl", "terrible", x) 
+
+#Then apply this function to movie corpus
+movie.unsup.corpus <- tm_map(movie.unsup.corpus, content_transformer(replaceWord))
+```
+
+From the list of terms, we found some words like "can", "will", and "one" that appear quite frequently. These words are kind of stop words that carry little information about sentiment. Therefore, we may further remove them.
+
+```{r}
+#the list might not be complete. Tried to remove all those neutral words
+more.stop.words <- c("one","can","will","men","nathan","french","women",
+  "wife","home","sister","father","coupl","actress","kid","woman","may","minut","poepl",
+  "year","charact","time","get","way","sadako","robin") 
+movie.unsup.corpus <- tm_map(movie.unsup.corpus, removeWords, more.stop.words)
+```
+
+
+##Positive and Negative Dictionary
+
+We are going to do sentiment analysis, based on movie reviews, to check whether overall audience are positive or negative about the movies. In order to do that, we have to let the computer know what are the words that are counted as *positive* and what are *negative* words. Depend on the case that you are analysing, positive words and negative words may be defined differently. You may ahead to define your own dictionary. Indeed, for certain case, you better define your own dictionary. Alternatively, you may use dictionaries defined by others, In this chapter, please download *Hu_Liu_negative_word_list.txt* and *Hu_Liu_positive_word_list.txt* from IVLE to your working directory.
+
+```{r}
+# convert to bytecodes to avoid "invalid multibyte string" messages
+bytecode.convert <- function(x) {iconv(enc2utf8(x), sub = "byte")}
+
+# read in positive and negative word lists from Hu and Liu (2004)
+positive.data.frame <- read.table(file = "Hu_Liu_positive_word_list.txt",
+  header = FALSE, colClasses = c("character"), row.names = NULL, 
+  col.names = "positive.words")
+positive.data.frame$positive.words <- 
+  bytecode.convert(positive.data.frame$positive.words)
+  
+negative.data.frame <- read.table(file = "Hu_Liu_negative_word_list.txt",
+  header = FALSE, colClasses = c("character"), row.names = NULL, 
+  col.names = "negative.words")  
+negative.data.frame$negative.words <- 
+  bytecode.convert(negative.data.frame$negative.words)
+```
+
+#Sentiment Analysis
+
+Sentiment analysis refers to the mechanism that systematically identifies, extracts, quantifies, and studies affective states and subjective information, in order to determine the attitude of a speaker, writer, or other subject with respect to some topic or the overall contextual polarity or emotional reaction to a document, interaction, or event. In the movie review case, we want to know whether the comments left are more positive or negative. 
+
+```{r}
+#We first find out the top positive words
+Hu.Liu.positive.dictionary <- 
+    c(as.character(positive.data.frame$positive.words))
+reviews.tdm.Hu.Liu.positive <- TermDocumentMatrix(movie.unsup.corpus, 
+  list(dictionary = Hu.Liu.positive.dictionary))
+examine.tdm <- removeSparseTerms(reviews.tdm.Hu.Liu.positive, 0.95)
+top.words <- Terms(examine.tdm)
+print(top.words)  
+Hu.Liu.frequent.positive <- findFreqTerms(reviews.tdm.Hu.Liu.positive, 25)
+# this provides a list positive words occurring at least 25 times
+# a review of this list suggests that all make sense (have content validity)
+# Then we accept Hu.Liu.frequent.positive fully as our positive dictionary
+test.positive.dictionary <- c(as.character(Hu.Liu.frequent.positive))
+
+
+#Now do the same for negative words
+Hu.Liu.negative.dictionary <- 
+    c(as.character(negative.data.frame$negative.words))
+reviews.tdm.Hu.Liu.negative <- TermDocumentMatrix(movie.unsup.corpus, 
+  list(dictionary = Hu.Liu.negative.dictionary))
+examine.tdm <- removeSparseTerms(reviews.tdm.Hu.Liu.negative, 0.97)
+top.words <- Terms(examine.tdm)
+print(top.words)    
+Hu.Liu.frequent.negative <- findFreqTerms(reviews.tdm.Hu.Liu.negative, 15)
+
+# this provides a short list negative words occurring at least 15 times
+# across the document collection... 
+# By checking the list, we found that one of these words seems out of place
+# as they could be thought of as positive: "funny" 
+test.negative <- setdiff(Hu.Liu.frequent.negative,c("funny"))
+# Now we exclude "funny" from the negative dictionary
+test.negative.dictionary <- c(as.character(test.negative)) 
+```
+
+One of the key step in text analytics is to quantify the texts so that the techniques that we learned previously, such as regression and classification, and some other techniques such as clustering and association rule, could be applied to further analyse the texts. The following codes will perform this task:
+
+```{r}
+#initialise vectors to store number of all words, number of positive words, number of negative words
+#and number of neutral words.
+total.words <- integer(length(names(movie.unsup.corpus)))
+positive.words <- integer(length(names(movie.unsup.corpus)))
+negative.words <- integer(length(names(movie.unsup.corpus)))
+other.words <- integer(length(names(movie.unsup.corpus)))
+
+#Generate the latest term document matrix
+reviews.tdm <- TermDocumentMatrix(movie.unsup.corpus)
+
+#Go through each document in the matrix to calculate the number of different kind of words 
+for(index.for.document in seq(along=names(movie.unsup.corpus))) {
+  positive.words[index.for.document] <- 
+    sum(termFreq(movie.unsup.corpus[[index.for.document]], 
+    control = list(dictionary = test.positive.dictionary)))
+  negative.words[index.for.document] <- 
+    sum(termFreq(movie.unsup.corpus[[index.for.document]], 
+    control = list(dictionary = test.negative.dictionary)))  
+  total.words[index.for.document] <- 
+    length(reviews.tdm[,index.for.document][["i"]])
+  other.words[index.for.document] <- total.words[index.for.document] -
+    positive.words[index.for.document] - negative.words[index.for.document]
+  }
+
+#Construct a data frame to store all these numbers
+document <- names(movie.unsup.corpus)
+train.data.frame <- data.frame(document,total.words,
+  positive.words, negative.words, other.words, stringsAsFactors = FALSE) 
+rownames(train.data.frame) <- paste("D",as.character(0:999),sep="")
+
+# compute text measures as percentages of words in each set
+train.data.frame$POSITIVE <- 
+  100 * train.data.frame$positive.words / 
+  train.data.frame$total.words
+  
+train.data.frame$NEGATIVE <- 
+  100 * train.data.frame$negative.words / 
+    train.data.frame$total.words 
+```
+
+The document names indeed contains the rating of the movie. Now we need to extract the ratings from the document names and add them to the data frame.
+
+```{r}
+for(index.for.document in seq(along = train.data.frame$document)) {
+  first_split <- strsplit(train.data.frame$document[index.for.document], 
+    split = "[_]")
+  second_split <- strsplit(first_split[[1]][2], split = "[.]")
+  train.data.frame$rating[index.for.document] <- as.numeric(second_split[[1]][1])
+  } # end of for-loop for defining 
+
+train.data.frame$thumbsupdown <- ifelse((train.data.frame$rating > 5), 2, 1)
+train.data.frame$thumbsupdown <- 
+  factor(train.data.frame$thumbsupdown, levels = c(1,2), 
+    labels = c("DOWN","UP"))
+```
+
+Finally, we obtain a data frame that  contains the all the information that is needed to perform relevant analysis.
+
+#Analysis
+
+With the data frame, we can perform several analysis.
+
+**Research question 1. Is the difference between number of positive words and number of negative words highly correlated to the rating?**
+
+```{r}
+#First difference is between the number of positive words and the number of negative words
+train.data.frame$diff1 <- train.data.frame$positive.words - train.data.frame$negative.words
+cor(train.data.frame$diff1, train.data.frame$rating)
+
+#The second difference is between the percentage of positive words and the percentage of negative words
+train.data.frame$diff2 <- train.data.frame$POSITIVE - train.data.frame$NEGATIVE
+cor(train.data.frame$diff2, train.data.frame$rating)
+```
+
+It seems that the second difference is more closely correlated to the rating. Can we use the difference to predict thumb up or down?
+
+```{r}
+PredictErrorByCutContinousVar <- function(threshold, data, predictor, outcome){
+    predict <- factor(data[,predictor] > threshold, levels=c("FALSE","TRUE"))
+    accuracy <- table(actual = data[,outcome], predict = predict,dnn=c("Actual","Predicted"))
+    #print (threshold)
+    #print(accuracy)
+    return ((accuracy[1,2]+accuracy[2,1])/sum(accuracy))
+}
+
+range(train.data.frame$diff2)
+
+diffs<--33:43
+errors <- sapply(diffs,PredictErrorByCutContinousVar,train.data.frame,"diff2","thumbsupdown")
+df <- data.frame(Diff.Pos.Neg.Ratio=diffs,Error=errors)
+
+library(ggplot2)
+ggplot(df, aes(x=Diff.Pos.Neg.Ratio,y=Error)) + geom_line()
+
+#Find the minimum possible error rate and the corresponding threshold
+minerror <- min(df$Error)
+threshold<-df[df$Error == minerror,]$Diff.Pos.Neg.Ratio
+
+cat("Using difference between positive word rate and negative word rate to predict thumbs up and down can achieve error rate of ",minerror, " when threshold=",threshold)
+```
+
+From the graph, we can tell that if we use 2 as the cut-off threshold, classify those films with diff2 > 0 as thumb up and those with diff2 <=0 as thumb down, we can achieve about 30.1% error rate.
+
+**Research question 2. Can we use the reviews to predict the rating?**
+
+```{r}
+fit.lm <- lm(rating ~ POSITIVE+NEGATIVE, train.data.frame)
+summary(fit.lm)
+```
+
+Although both POSITIVE and NEGATIVE are significant in predicting the rating, R-square is not so good. The prediction is not satisfactory. This is understandable. It is quite hard to accurately predict exact rating of movies even with other more comprehensive data, due to the nature of rating. Can you really tell the difference between rating of 7 and 8? Rather predicting thumb up or down is more achievable goal. Now, let's try to use the regression result to predict thumb up or down.
+
+```{r}
+train.data.frame$rating.pred <- predict(fit.lm, newdata = train.data.frame)
+
+rating.shretholds <- seq(0.1,10,0.1)
+errors <- sapply(rating.shretholds,PredictErrorByCutContinousVar,train.data.frame,"rating.pred","thumbsupdown")
+
+#Visualise the change of error rates with respect to the change of thresholds
+df <- data.frame(RatingThreshold=rating.shretholds,Error=errors)
+ggplot(df, aes(x=RatingThreshold,y=Error)) + geom_line()
+
+#Find the minimum possible error rate and the corresponding threshold
+minerror <- min(df$Error)
+threshold<-df[df$Error == minerror,]$RatingThreshold
+
+cat("Using linear regression to predict thumbs up and down can achieve error rate of ",minerror, " when threshold=",threshold)
+```
+
+As you can tell from the graph, when the cut-off point is 5.5, the error rate is slightly better than what could be achieved error rate of 29.8%, slightly better than the previous method.
+
+#Further research
+
+There are a few more directions taht we may pursue to further enhance the prediction of thumbs up and down by texts.
+
+* Use decision tree, random forest, or SVMs to classify thumbs up and down.
+* In the above analysis, we treat all the positive words the same and treat all the negative words the same, thus only concentrated on the total number of positive words and the total number of negative words. However, different words may carry different weights in determining the final rating. Therefore, we may construct a data frame with the frequency of various words, rather than the total number and then perform classification on it.
+* Perform cluster analysis to see if we could form clusters of words on their contribution to the ratings.
+
